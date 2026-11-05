@@ -244,7 +244,22 @@
         </div>
     </div>
 
-    <!-- TELAS DE LOGIN (ÚNICA OPÇÃO AGORA) -->
+    <!-- TELAS DE ONBOARDING (Pós Login) -->
+    <div class="screen-layer hidden" id="screenTheme">
+        <h2 class="welcome-title">Qual tema mais te agrada?</h2>
+        <p class="welcome-sub">Escolha a base visual. Você pode mudar depois.</p>
+        <div class="theme-grid" id="themeGridOnboarding"></div>
+        <button class="btn-large" onclick="goToFontStep()">Continuar</button>
+    </div>
+
+    <div class="screen-layer hidden" id="screenFont">
+        <h2 class="welcome-title">Escolha a Fonte</h2>
+        <p class="welcome-sub">Como você prefere ler os textos?</p>
+        <div style="width:100%; max-width:320px;" id="fontGridOnboarding"></div>
+        <button class="btn-large" onclick="goToAppStep()">Continuar</button>
+    </div>
+
+    <!-- TELA DE LOGIN -->
     <div class="screen-layer hidden" id="screenAuth">
         <div id="authForms" style="width:100%; max-width:320px; display: flex; flex-direction: column; align-items: center;">
             <h2 class="welcome-title" id="formTitle">Fazer Login</h2>
@@ -264,6 +279,7 @@
         <button class="btn-outline" onclick="logoutDevice()" style="font-size: 0.9rem;">Sair deste dispositivo</button>
     </div>
 
+    <!-- APP PRINCIPAL -->
     <div class="app-scroll-wrapper" id="appMain">
         <div class="app">
             <div class="brand-header">
@@ -319,7 +335,7 @@
                             <div class="change-panel" id="changePanel">
                                 <div style="margin-bottom:12px;">
                                     <label style="font-size:0.8rem; font-weight:600; color:var(--text-light);">Valor Recebido</label>
-                                    <input type="text" id="receivedInput" placeholder="0,00" inputmode="decimal" value="0,00" style="width:100%; background:var(--bg); border:2px solid var(--accent-border); border-radius:10px; padding:12px; font-size:1.2rem; font-family:var(--display-font); font-weight:700; outline:none; margin-top:4px; color:var(--text);">
+                                    <input type="text" id="receivedInput" placeholder="0,00" inputmode="decimal" value="0,00" onfocus="this.select()" style="width:100%; background:var(--bg); border:2px solid var(--accent-border); border-radius:10px; padding:12px; font-size:1.2rem; font-family:var(--display-font); font-weight:700; outline:none; margin-top:4px; color:var(--text);">
                                 </div>
                                 <div style="display:flex; justify-content:space-between; font-size:1rem; font-weight:800;">
                                     <span>Troco</span><span id="changeDisplay" style="color:#2E7D32; font-family:var(--display-font);">R$ 0,00</span>
@@ -480,14 +496,16 @@
         const CLOUD_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
         const RESET_PASSWORD = '19102007';
 
-        // LISTA DE USUÁRIOS AUTORIZADOS
+        // USUÁRIOS E SENHAS (Aceita variações na checagem abaixo)
         const AUTHORIZED_USERS = [
-            { user: 'nyllza', pass: 'explosaonopotenyllza' },
-            { user: 'jullya', pass: 'explosaonopotejullya' },
-            { user: 'Stenio', pass: 'explosanopotestenio' },
-            { user: 'sofhia', pass: 'explosanopotesofhia' },
-            { user: 'evandson', pass: 'explosaonopoteevandson' }
+            { user: 'nyllza', variations: ['nyllza', 'nylza', 'nilza', 'nillza'] },
+            { user: 'jullya', variations: ['jullya', 'julia', 'jullia', 'julya'] },
+            { user: 'Stenio', variations: ['stenio', 'estenio'] },
+            { user: 'sofhia', variations: ['sofhia', 'sophia', 'sofia'] },
+            { user: 'evandson', variations: ['evandson', 'evandison'] },
+            { user: 'thayssa', variations: ['thayssa', 'taissa', 'thaisa', 'thay'] }
         ];
+        const PASSWORD_BASE64 = 'ZXhwbG9zYW9ub3BvdGU='; // "explosaonopote"
 
         const BASE_THEMES = [
             { id: 'ninho', name: 'Ninho', bg: '#FFF9F9', card: '#FFFFFF', text: '#2D1A16', textLight: '#5D4037', textLighter: '#8D6E63', dark: false },
@@ -544,7 +562,8 @@
             tempTheme: localStorage.getItem('caixa_theme_base') || 'ninho',
             tempFont: localStorage.getItem('caixa_font') || 'Inter',
             resumoFilter: 'today',
-            graficosFilter: 'today'
+            graficosFilter: 'today',
+            firstLoginStep: 'theme'
         };
 
         function uid(){ return 'id'+Date.now()+Math.random().toString(36).substr(2,6); }
@@ -608,17 +627,86 @@
 
         function handleLogin() {
             const userInput = document.getElementById('authUser').value.trim();
-            const passInput = document.getElementById('authPass').value;
+            const passInput = document.getElementById('authPass').value.trim().toLowerCase().replace(/\s+/g, '');
 
-            const validUser = AUTHORIZED_USERS.find(u => u.user.toLowerCase() === userInput.toLowerCase() && u.pass === passInput);
+            // Verifica a senha (aceita "explosaonopote" ou "explosao no pote")
+            if (btoa(passInput) !== PASSWORD_BASE64) {
+                return showToast('Senha incorreta.', 'error');
+            }
+
+            // Verifica o usuário (variações)
+            const validUser = AUTHORIZED_USERS.find(u => 
+                u.variations.some(v => v.toLowerCase() === userInput.toLowerCase())
+            );
 
             if (validUser) {
-                appState.user = { name: validUser.user, pass: validUser.pass };
+                appState.user = { name: validUser.user };
                 localStorage.setItem('caixa_user', JSON.stringify(appState.user));
-                enterAppDirectly();
+                
+                // Se for o primeiro login neste dispositivo, mostra a tela de tema
+                if (!localStorage.getItem('caixa_first_login_done')) {
+                    appState.firstLoginStep = 'theme';
+                    transitionTo('screenTheme');
+                    renderOnboardingThemes();
+                } else {
+                    enterAppDirectly();
+                }
             } else {
-                showToast('Usuário ou senha incorretos.', 'error');
+                showToast('Usuário não encontrado.', 'error');
             }
+        }
+
+        // ================= ONBOARDING (PÓS LOGIN) =================
+        function transitionTo(targetId) {
+            document.querySelectorAll('.screen-layer').forEach(l => l.classList.add('hidden'));
+            setTimeout(() => {
+                const target = document.getElementById(targetId);
+                if(target) target.classList.remove('hidden');
+            }, 100);
+        }
+
+        function renderOnboardingThemes() {
+            const grid = document.getElementById('themeGridOnboarding');
+            grid.innerHTML = '';
+            BASE_THEMES.forEach(t => {
+                const btn = document.createElement('div');
+                btn.className = 'theme-card' + (appState.tempTheme === t.id ? ' active' : '');
+                btn.innerHTML = `<div class="theme-color-preview" style="background: ${t.bg}; border-color: ${t.text};"></div><span class="theme-name">${t.name}</span>`;
+                btn.onclick = () => {
+                    appState.tempTheme = t.id;
+                    applyBaseTheme(t.id);
+                    renderOnboardingThemes();
+                };
+                grid.appendChild(btn);
+            });
+        }
+
+        function goToFontStep() {
+            transitionTo('screenFont');
+            renderOnboardingFonts();
+        }
+
+        function renderOnboardingFonts() {
+            const container = document.getElementById('fontGridOnboarding');
+            container.innerHTML = '';
+            FONTS.forEach(f => {
+                const btn = document.createElement('div');
+                btn.className = 'font-card' + (appState.tempFont === f.id ? ' active' : '');
+                btn.innerHTML = `<span class="font-name" style="font-family: ${f.css};">${f.name}</span><span class="font-preview" style="font-family: ${f.css};">Aa</span>`;
+                btn.onclick = () => {
+                    appState.tempFont = f.id;
+                    applyFont(f.id);
+                    renderOnboardingFonts();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function goToAppStep() {
+            localStorage.setItem('caixa_theme_base', appState.tempTheme);
+            localStorage.setItem('caixa_font', appState.tempFont);
+            localStorage.setItem('caixa_first_login_done', 'true');
+            enterAppDirectly();
         }
 
         function enterAppDirectly() {
@@ -632,7 +720,7 @@
             }, 100);
         }
 
-        function logoutDevice() { if(confirm('Sair deste dispositivo? Você terá que fazer login novamente.')) { appState.user = null; localStorage.removeItem('caixa_user'); location.reload(); } }
+        function logoutDevice() { if(confirm('Sair deste dispositivo? Você terá que fazer login novamente.')) { appState.user = null; localStorage.removeItem('caixa_user'); localStorage.removeItem('caixa_first_login_done'); location.reload(); } }
 
         function applyBaseTheme(baseId) {
             const b = BASE_THEMES.find(x=>x.id===baseId) || BASE_THEMES[0];
@@ -720,6 +808,11 @@
                 document.querySelectorAll('.payment-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
                 document.getElementById('changePanel').classList.toggle('show', m === 'Dinheiro'); updateChange();
             };
+        });
+
+        // SELEÇÃO AUTOMÁTICA DO TROCO
+        document.getElementById('receivedInput').addEventListener('focus', function() {
+            this.select();
         });
 
         document.getElementById('toggleMissingBtn').onclick = () => {
